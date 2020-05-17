@@ -91,9 +91,7 @@
 
 &ethernet {
 	pinctrl-names = "default";
-
 	mtd-mac-address = <&rom 0xf100>;
-
 	mediatek,portmap = "wllll";
 };
 

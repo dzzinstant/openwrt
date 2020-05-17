@@ -122,10 +122,11 @@
 };
 
 &ethernet {
-	pinctrl-names = "default";
-	pinctrl-0 = <&rgmii1_pins &rgmii2_pins &mdio_pins>;
+	status = "okay";
 
 	mtd-mac-address = <&factory 0x4>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&rgmii1_pins &rgmii2_pins &mdio_pins>;
 
 	port@4 {
 		status = "okay";

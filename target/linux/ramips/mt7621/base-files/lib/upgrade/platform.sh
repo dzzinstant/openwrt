@@ -45,7 +45,6 @@ platform_do_upgrade() {
 	asus,rt-ac65p|\
 	asus,rt-ac85p|\
 	hiwifi,hc5962|\
-	linksys,ea7500-v2|\
 	netgear,r6220|\
 	netgear,r6260|\
 	netgear,r6350|\

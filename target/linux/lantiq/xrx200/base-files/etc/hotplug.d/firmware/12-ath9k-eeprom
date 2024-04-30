@@ -27,7 +27,7 @@ case "$FIRMWARE" in
 				/usr/bin/fritz_cal_extract -i 1 -s 0x1e800 -e 0x207 -l 5120 -o /lib/firmware/$FIRMWARE $(find_mtd_chardev "urlader")
 				;;
 			avm,fritz7430)
-				reversed=$(( \
+				reversed=$( ( \
 				/usr/bin/fritz_cal_extract -i 1 -s 0x1e000 -e 0x207 -l 5120 $(find_mtd_chardev "urlader") || \
 				/usr/bin/fritz_cal_extract -i 1 -s 0x1e800 -e 0x207 -l 5120 $(find_mtd_chardev "urlader") \
 			       	) | hexdump -v -e '/1 "%02x "')

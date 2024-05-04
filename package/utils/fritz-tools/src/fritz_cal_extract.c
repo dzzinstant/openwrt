@@ -41,10 +41,10 @@
 #define DEFAULT_BUFFERSIZE (1024 * 64)
 
 /* Reverse only buffer elements inside range [bottom:top] */
-static void buffer_reverse(unsigned char *data, unsigned int bottom, unsigned int top)
+static void buffer_reverse(unsigned char *data, size_t bottom, size_t top)
 {
 	register unsigned char swapbyte;
-	unsigned int center = bottom + (top - bottom) / 2;
+	size_t center = bottom + (top - bottom) / 2;
 
 	for (; bottom < center; ++bottom, --top) {
 		swapbyte = data[bottom];
@@ -286,7 +286,7 @@ int main(int argc, char **argv)
 
 	limit -= truncate;
 	if (limit <= skip) {
-		fprintf(stderr, "Failed: Resulting data range [%ld:%ld] is invalid!\n", 
+		fprintf(stderr, "Failed: Resulting data range [%d:%d] is invalid!\n", 
 				skip, limit - 1);
 		goto out_bad;
 	}

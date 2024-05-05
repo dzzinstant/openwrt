@@ -9,7 +9,7 @@ on:
       - 'package/**'
       - 'target/linux/generic/**'
       - 'toolchain/**'
-  push:
+  xpush:
     paths:
       - '.github/workflows/packages.yml'
       - 'config/**'

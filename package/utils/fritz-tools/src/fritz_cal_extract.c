@@ -41,10 +41,10 @@
 #define DEFAULT_BUFFERSIZE (1024 * 64)
 
 /* Reverse only buffer elements inside range [bottom:top] */
-static void buffer_reverse(unsigned char *data, size_t bottom, size_t top)
+static void buffer_reverse(unsigned char *data, unsigned int bottom, unsigned int top)
 {
 	register unsigned char swapbyte;
-	size_t center = bottom + (top - bottom) / 2;
+	unsigned int center = bottom + (top - bottom) / 2;
 
 	for (; bottom < center; ++bottom, --top) {
 		swapbyte = data[bottom];

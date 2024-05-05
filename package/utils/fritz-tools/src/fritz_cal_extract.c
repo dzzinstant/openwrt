@@ -38,7 +38,7 @@
 #include "zlib.h"
 
 #define CHUNK 1024
-#define DEFAULT_BUFFERSIZE (1024 * 64)
+#define DEFAULT_BUFFERSIZE (1024 * 128)
 
 /* Reverse only buffer elements inside range [bottom:top] */
 static void buffer_reverse(unsigned char *data, unsigned int bottom, unsigned int top)
@@ -284,12 +284,12 @@ int main(int argc, char **argv)
 		goto out_bad;
 	}
 
-	limit -= truncate;
-	if (limit <= skip) {
-		fprintf(stderr, "Failed: Resulting data range [%d:%d] is invalid!\n", 
-				(unsigned int) skip, (unsigned int) limit - 1);
+	if (limit <= skip + truncate) {
+		fprintf(stderr, "Failed: Resulting data range [%u:%u] is invalid!\n", 
+				(unsigned int)skip, (unsigned int)(limit - truncate - 1));
 		goto out_bad;
 	}
+	limit -= truncate;
 
 	if (reversed)
 		buffer_reverse(buf, skip, limit - 1);

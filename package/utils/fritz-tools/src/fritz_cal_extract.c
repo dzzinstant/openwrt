@@ -287,7 +287,7 @@ int main(int argc, char **argv)
 	limit -= truncate;
 	if (limit <= skip) {
 		fprintf(stderr, "Failed: Resulting data range [%d:%d] is invalid!\n", 
-				skip, limit - 1);
+				(unsigned int) skip, (unsigned int) limit - 1);
 		goto out_bad;
 	}
 

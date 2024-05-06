@@ -9,7 +9,7 @@
  * Version 1.4  11 December 2005  Mark Adler
  *
  * Modifications to also handle calibration data in reversed byte order
- * and truncation of data (c) 2024 by <dzsoftware@posteo.org>.
+ * (c) 2024 by <dzsoftware@posteo.org>.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,13 +40,14 @@
 #define CHUNK 1024
 #define DEFAULT_BUFFERSIZE (1024 * 128)
 
-/* Reverse only buffer elements inside range [bottom:top] */
-static void buffer_reverse(unsigned char *data, unsigned int bottom, unsigned int top)
+/* Reverse byte order in data buffer.
+ * 'top' is position of last valid data byte = (datasize - 1) */
+static void buffer_reverse(unsigned char *data, unsigned int top)
 {
 	register unsigned char swapbyte;
-	unsigned int center = bottom + (top - bottom) / 2;
+	const unsigned int center = top / 2;
 
-	for (; bottom < center; ++bottom, --top) {
+	for (unsigned int bottom = 0; bottom < center; ++bottom, --top) {
 		swapbyte = data[bottom];
 		data[bottom] = data[top];
 		data[top] = swapbyte;
@@ -55,12 +56,15 @@ static void buffer_reverse(unsigned char *data, unsigned int bottom, unsigned in
 
 /* Decompress from file source to data buffer until stream ends or 
    buffer is full.
+   After successful return, 'buf' points to complete inflated data,
+   'datasize' contains number of bytes inflated.
+
    inflate_to_buffer() returns Z_OK on success, Z_MEM_ERROR if memory 
    could not be allocated for processing, Z_DATA_ERROR if the deflate 
    data is invalid or incomplete, Z_VERSION_ERROR if the version of 
    zlib.h and the version of the library linked do not match, or 
    Z_ERRNO if there is an error reading or writing the files. */
-static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *limit)
+static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *datasize)
 {
     int ret;
     z_stream strm;
@@ -77,7 +81,7 @@ static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *limit)
         return ret;
 
     /* set data buffer as stream output */
-    strm.avail_out = *limit;
+    strm.avail_out = *datasize;
     strm.next_out = buf;
 
     /* decompress until deflate stream ends or end of file */
@@ -113,9 +117,9 @@ static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *limit)
         /* done when inflate() says it's done */
     } while (ret != Z_STREAM_END);
 
-    /* set limit to end of retrieved data */
-    assert(strm.total_out <= *limit);
-    *limit = strm.total_out;
+    /* set datasize to end of retrieved data */
+    assert(strm.total_out <= *datasize);
+    *datasize = strm.total_out;
 
     /* clean up and return */
     (void)inflateEnd(&strm);
@@ -156,8 +160,8 @@ static unsigned int get_num(char *str)
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: fritz_cal_extract [-s seek offset] [-i skip] [-o output file] [-l limit]\n\t"
-			"[-t truncate n bytes] [-r reverse extracted data] [infile] -e entry_id\n"
+	fprintf(stderr, "Usage: fritz_cal_extract -e entry_id [-s seek offset] [-l limit]\n"
+			"\t[-r reverse extracted data] [-i skip n bytes] [-o output file] [infile]\n"
 			"Finds and extracts zlib compressed calibration data in the EVA loader\n");
 	exit(EXIT_FAILURE);
 }
@@ -174,14 +178,14 @@ int main(int argc, char **argv)
 	unsigned char *buf = NULL;
 	FILE *in = stdin;
 	FILE *out = stdout;
-	size_t limit = 0, skip = 0, truncate = 0;
+	size_t limit = 0, skip = 0;
 	int initial_offset = 0;
 	int entry = -1;
 	bool reversed = false;
 	int ret;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "s:e:o:l:i:t:r")) != -1) {
+	while ((opt = getopt(argc, argv, "s:e:o:l:i:r")) != -1) {
 		switch (opt) {
 		case 's':
 			initial_offset = (int)get_num(optarg);
@@ -215,13 +219,6 @@ int main(int argc, char **argv)
 			skip = (size_t)get_num(optarg);
 			if (errno) {
 				perror("Failed to parse skip");
-				goto out_bad;
-			}
-			break;
-		case 't':
-			truncate = (size_t)get_num(optarg);
-			if (errno) {
-				perror("Failed to parse truncate");
 				goto out_bad;
 			}
 			break;
@@ -272,8 +269,7 @@ int main(int argc, char **argv)
 		goto out_bad;
 	}
 
-	/* Create data buffer.
-	 * 'limit' will be one-off the last valid buffer element. */
+	/* Create data buffer. */
 	limit = (limit ? limit : DEFAULT_BUFFERSIZE) + skip;
 	buf = malloc(limit);
 	assert(buf != NULL);
@@ -284,15 +280,14 @@ int main(int argc, char **argv)
 		goto out_bad;
 	}
 
-	if (limit <= skip + truncate) {
-		fprintf(stderr, "Failed: Resulting data range [%u:%u] is invalid!\n", 
-				(unsigned int)skip, (unsigned int)(limit - truncate - 1));
+	if (reversed)
+		buffer_reverse(buf, limit - 1);
+	
+	if (limit <= skip) {
+		fprintf(stderr, "Failed to skip %u of %u total data bytes!\n", 
+				(unsigned int)skip, (unsigned int)limit);
 		goto out_bad;
 	}
-	limit -= truncate;
-
-	if (reversed)
-		buffer_reverse(buf, skip, limit - 1);
 
 	if (fwrite(&buf[skip], (limit - skip), 1, out) != 1 || ferror(out)) {
 		fprintf(stderr, "Failed to write data buffer to output file");

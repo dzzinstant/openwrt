@@ -279,8 +279,6 @@ int main(int argc, char **argv)
 				" Set a limit [-l] large enough to retrieve complete data set.\n");
 		goto out_bad;
 	}
-	fprintf(stderr, "DEBUG: Returned %d. Writing %u bytes (%u total - %u skipped).\n", 
-			ret, (unsigned int)(limit - skip), (unsigned int)limit, (unsigned int) skip);
 	ret = (ret == Z_STREAM_END) ? Z_OK : ret; /* normalize return value */
 
 	if (ret != Z_OK) {
@@ -291,9 +289,6 @@ int main(int argc, char **argv)
 	if (reversed)
 		buffer_reverse(buf, limit - 1);
 	
-	fprintf(stderr, "DEBUG: Writing %u bytes (%u total - %u skipped).\n", 
-			(unsigned int)(limit - skip), (unsigned int)limit, (unsigned int) skip);
-
 	if (limit <= skip) {
 		fprintf(stderr, "Failed to skip %u of %u total data bytes!\n", 
 				(unsigned int)skip, (unsigned int)limit);
@@ -318,8 +313,5 @@ out:
 	if (out)
 		fclose(out);
 	free(buf);
-
-	fprintf(stderr, "DEBUG: Exit value: %d. Z_OK=%d Z_STREAM_END=%d, EXIT_FAILURE=%d, EXIT_SUCCESS=%d\n",
-			ret, Z_OK, Z_STREAM_END, EXIT_FAILURE, EXIT_SUCCESS);
 	return ret;
 }

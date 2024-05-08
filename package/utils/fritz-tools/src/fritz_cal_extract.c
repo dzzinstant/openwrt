@@ -56,15 +56,20 @@ static void buffer_reverse(unsigned char *data, unsigned int top)
 
 /* Decompress from file source to data buffer until stream ends or 
    buffer is full.
+   The calling function has to set a variable containing the maximum
+   allowed data size, which will be passed to inflate_to_buffer() 
+   as reference.
    After successful return, 'buf' points to complete inflated data,
-   'datasize' contains number of bytes inflated.
+   'limit' contains number of bytes inflated.
 
-   inflate_to_buffer() returns Z_OK on success, Z_MEM_ERROR if memory 
-   could not be allocated for processing, Z_DATA_ERROR if the deflate 
+   On success, inflate_to_buffer() returns Z_END_STREAM if complete 
+   data set was retrieved, or Z_OK if data set was retrieved up to limit.
+   On error, inflate_to_buffer() returns Z_MEM_ERROR if memory could 
+   not be allocated for processing, Z_DATA_ERROR if the deflate 
    data is invalid or incomplete, Z_VERSION_ERROR if the version of 
    zlib.h and the version of the library linked do not match, or 
    Z_ERRNO if there is an error reading or writing the files. */
-static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *datasize)
+static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *limit)
 {
     int ret;
     z_stream strm;
@@ -81,7 +86,7 @@ static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *datasize)
         return ret;
 
     /* set data buffer as stream output */
-    strm.avail_out = *datasize;
+    strm.avail_out = *limit;
     strm.next_out = buf;
 
     /* decompress until deflate stream ends or end of file */
@@ -107,23 +112,16 @@ static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *datasize)
 			(void)inflateEnd(&strm);
 			return ret;
 	}
+        /* done when inflate() says it's done or buffer full */
+    } while (ret != Z_STREAM_END && strm.avail_out > 0);
 
-	if (strm.avail_out == 0 && ret != Z_STREAM_END) {
-		fprintf(stderr, "Failed to inflate input data: buffer too small!"
-				" Use option -l to increase caldata size limit.\n");
-		(void)inflateEnd(&strm);
-		return Z_ERRNO;
-	}
-        /* done when inflate() says it's done */
-    } while (ret != Z_STREAM_END);
-
-    /* set datasize to end of retrieved data */
-    assert(strm.total_out <= *datasize);
-    *datasize = strm.total_out;
+    /* set limit to end of retrieved data */
+    assert(strm.total_out <= *limit);
+    *limit = strm.total_out;
 
     /* clean up and return */
     (void)inflateEnd(&strm);
-    return (strm.avail_out == 0 ? Z_OK : (ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR));
+    return (ret == Z_STREAM_END ? Z_STREAM_END : (strm.avail_out == 0 ? Z_OK : Z_DATA_ERROR));
 }
 
 /* report a zlib or i/o error */
@@ -275,6 +273,16 @@ int main(int argc, char **argv)
 	assert(buf != NULL);
 
 	ret = inflate_to_buffer(in, buf, &limit);
+
+	if (reversed && ret != Z_STREAM_END) { /* didn't read to stream end */
+		fprintf(stderr, "Refusing to reverse incomplete data!"
+				" Set a limit [-l] large enough to retrieve complete data set.\n");
+		goto out_bad;
+	}
+	fprintf(stderr, "DEBUG: Returned %d. Writing %u bytes (%u total - %u skipped).\n", 
+			ret, (unsigned int)(limit - skip), (unsigned int)limit, (unsigned int) skip);
+	ret = (ret == Z_STREAM_END) ? Z_OK : ret; /* normalize return value */
+
 	if (ret != Z_OK) {
 		zerr(ret);
 		goto out_bad;
@@ -283,6 +291,9 @@ int main(int argc, char **argv)
 	if (reversed)
 		buffer_reverse(buf, limit - 1);
 	
+	fprintf(stderr, "DEBUG: Writing %u bytes (%u total - %u skipped).\n", 
+			(unsigned int)(limit - skip), (unsigned int)limit, (unsigned int) skip);
+
 	if (limit <= skip) {
 		fprintf(stderr, "Failed to skip %u of %u total data bytes!\n", 
 				(unsigned int)skip, (unsigned int)limit);
@@ -293,6 +304,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to write data buffer to output file");
 		goto out_bad;
 	}
+
 	goto out;
 
 	zerr(ret);
@@ -307,5 +319,7 @@ out:
 		fclose(out);
 	free(buf);
 
+	fprintf(stderr, "DEBUG: Exit value: %d. Z_OK=%d Z_STREAM_END=%d, EXIT_FAILURE=%d, EXIT_SUCCESS=%d\n",
+			ret, Z_OK, Z_STREAM_END, EXIT_FAILURE, EXIT_SUCCESS);
 	return ret;
 }

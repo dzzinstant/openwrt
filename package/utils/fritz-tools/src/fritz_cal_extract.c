@@ -38,10 +38,13 @@
 #include "zlib.h"
 
 #define CHUNK 1024
-#define DEFAULT_BUFFERSIZE (1024 * 128)
+#define DEFAULT_BUFFERSIZE (65 * 1024)
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
 
 /* Reverse byte order in data buffer.
- * 'top' is position of last valid data byte = (datasize - 1) */
+ * 'top' is position of last valid data byte = (datasize - 1)
+ */
 static void buffer_reverse(unsigned char *data, unsigned int top)
 {
 	register unsigned char swapbyte;
@@ -54,21 +57,23 @@ static void buffer_reverse(unsigned char *data, unsigned int top)
 	}
 }
 
-/* Decompress from file source to data buffer until stream ends or 
-   buffer is full.
-   The calling function has to set a variable containing the maximum
-   allowed data size, which will be passed to inflate_to_buffer() 
-   as reference.
-   After successful return, 'buf' points to complete inflated data,
-   'limit' contains number of bytes inflated.
-
-   On success, inflate_to_buffer() returns Z_END_STREAM if complete 
-   data set was retrieved, or Z_OK if data set was retrieved up to limit.
-   On error, inflate_to_buffer() returns Z_MEM_ERROR if memory could 
-   not be allocated for processing, Z_DATA_ERROR if the deflate 
-   data is invalid or incomplete, Z_VERSION_ERROR if the version of 
-   zlib.h and the version of the library linked do not match, or 
-   Z_ERRNO if there is an error reading or writing the files. */
+/* Decompress from file source to data buffer until stream ends
+ * or *limit bytes have been written to buffer.
+ *
+ * On call, 'limit' must reference a variable containing the intended
+ * number of bytes to retrieve (must be <= allocated buffer size).
+ *
+ * Return values (success):
+ * Z_END_STREAM if complete data was retrieved (*limit == size of complete data),
+ * or Z_OK if data was retrieved up to limit (*limit == original value).
+ *
+ * Return values (failure):
+ * Z_MEM_ERROR if memory could not be allocated for processing, 
+ * Z_DATA_ERROR if the deflate data is invalid or incomplete, 
+ * Z_VERSION_ERROR if the version of zlib.h and the version of the 
+ * library linked do not match, or 
+ * Z_ERRNO if there is an error reading or writing the files.
+ */
 static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *limit)
 {
     int ret;
@@ -112,7 +117,7 @@ static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *limit)
 			(void)inflateEnd(&strm);
 			return ret;
 	}
-        /* done when inflate() says it's done or buffer full */
+        /* done when inflate() says it's done or limit reached */
     } while (ret != Z_STREAM_END && strm.avail_out > 0);
 
     /* set limit to end of retrieved data */
@@ -176,10 +181,11 @@ int main(int argc, char **argv)
 	unsigned char *buf = NULL;
 	FILE *in = stdin;
 	FILE *out = stdout;
+	size_t datasize = DEFAULT_BUFFERSIZE;
 	size_t limit = 0, skip = 0;
 	int initial_offset = 0;
 	int entry = -1;
-	bool reversed = false;
+	bool reversed = false, limit_was_set = true;
 	int ret;
 	int opt;
 
@@ -267,35 +273,50 @@ int main(int argc, char **argv)
 		goto out_bad;
 	}
 
+	/* Set boundaries. Only keep default datasize if we need complete data
+	 * for reversal and didn't set a higher limit. */
+	if (!limit) {
+		limit_was_set = false;
+		limit = datasize - skip;
+	}
+	datasize = (reversed && datasize >= limit + skip) ? datasize : (limit + skip);
+
 	/* Create data buffer. */
-	limit = (limit ? limit : DEFAULT_BUFFERSIZE) + skip;
-	buf = malloc(limit);
+	buf = malloc(datasize);
 	assert(buf != NULL);
 
-	ret = inflate_to_buffer(in, buf, &limit);
+	ret = inflate_to_buffer(in, buf, &datasize);
 
-	if (reversed && ret != Z_STREAM_END) { /* didn't read to stream end */
-		fprintf(stderr, "Refusing to reverse incomplete data!"
-				" Set a limit [-l] large enough to retrieve complete data set.\n");
+	if ((reversed || !limit_was_set) && ret != Z_STREAM_END) { /* didn't read to stream end */
+		fprintf(stderr, "Failed: Data exceeds buffer size of %u. Refusing to reverse"
+				" or store incomplete data."
+				" Use a higher limit [-l] to increase buffer size.\n",
+				(unsigned int) datasize);
 		goto out_bad;
 	}
+	fprintf(stderr, "DEBUG: Return value = %d. Writing %u bytes (total %u - %u skipped). Limit was %u\n", 
+			ret, (unsigned int)(datasize - skip), (unsigned int)datasize, (unsigned int) skip, (unsigned int)limit);
+	
 	ret = (ret == Z_STREAM_END) ? Z_OK : ret; /* normalize return value */
-
 	if (ret != Z_OK) {
 		zerr(ret);
 		goto out_bad;
 	}
 
 	if (reversed)
-		buffer_reverse(buf, limit - 1);
+		buffer_reverse(buf, datasize - 1);
 	
-	if (limit <= skip) {
-		fprintf(stderr, "Failed to skip %u of %u total data bytes!\n", 
-				(unsigned int)skip, (unsigned int)limit);
+	fprintf(stderr, "DEBUG: Return value = %d. Writing %u bytes (total %u - %u skipped). Limit was %u\n", 
+			ret, (unsigned int)(datasize - skip), (unsigned int)datasize, (unsigned int)skip, (unsigned int)limit);
+
+	if (datasize <= skip) {
+		fprintf(stderr, "Failed to skip %u bytes, total data size is %u!\n", 
+				(unsigned int)skip, (unsigned int)datasize);
 		goto out_bad;
 	}
 
-	if (fwrite(&buf[skip], (limit - skip), 1, out) != 1 || ferror(out)) {
+	limit = MIN(limit, datasize - skip);
+	if (fwrite(&buf[skip], limit, 1, out) != 1 || ferror(out)) {
 		fprintf(stderr, "Failed to write data buffer to output file");
 		goto out_bad;
 	}
@@ -313,5 +334,7 @@ out:
 	if (out)
 		fclose(out);
 	free(buf);
+
+	fprintf(stderr, "DEBUG: Exit value: %d.\n", ret);
 	return ret;
 }

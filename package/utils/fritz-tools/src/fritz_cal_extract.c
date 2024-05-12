@@ -76,81 +76,81 @@ static void buffer_reverse(unsigned char *data, unsigned int top)
  */
 static int inflate_to_buffer(FILE *source, unsigned char *buf, size_t *limit)
 {
-    int ret;
-    z_stream strm;
-    unsigned char in[CHUNK];
-    
-    /* allocate inflate state */
-    strm.zalloc = Z_NULL;
-    strm.zfree = Z_NULL;
-    strm.opaque = Z_NULL;
-    strm.avail_in = 0;
-    strm.next_in = Z_NULL;
-    ret = inflateInit(&strm);
-    if (ret != Z_OK)
-        return ret;
+	int ret;
+	z_stream strm;
+	unsigned char in[CHUNK];
 
-    /* set data buffer as stream output */
-    strm.avail_out = *limit;
-    strm.next_out = buf;
+	/* allocate inflate state */
+	strm.zalloc = Z_NULL;
+	strm.zfree = Z_NULL;
+	strm.opaque = Z_NULL;
+	strm.avail_in = 0;
+	strm.next_in = Z_NULL;
+	ret = inflateInit(&strm);
+	if (ret != Z_OK)
+		return ret;
 
-    /* decompress until deflate stream ends or end of file */
-    do {
-        strm.avail_in = fread(in, 1, CHUNK, source);
-        if (ferror(source)) {
-            (void)inflateEnd(&strm);
-            return Z_ERRNO;
-        }
-        if (strm.avail_in == 0)
-            break;
-        strm.next_in = in;
+	/* set data buffer as stream output */
+	strm.avail_out = *limit;
+	strm.next_out = buf;
 
-        /* run inflate(), fill data buffer with all available output */
-	ret = inflate(&strm, Z_FINISH);
-	assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
-
-	switch (ret) {
-		case Z_NEED_DICT:
-			ret = Z_DATA_ERROR;     /* and fall through */
-		case Z_DATA_ERROR:
-		case Z_MEM_ERROR:
+	/* decompress until deflate stream ends or end of file */
+	do {
+		strm.avail_in = fread(in, 1, CHUNK, source);
+		if (ferror(source)) {
 			(void)inflateEnd(&strm);
-			return ret;
-	}
-        /* done when inflate() says it's done or limit reached */
-    } while (ret != Z_STREAM_END && strm.avail_out > 0);
+			return Z_ERRNO;
+		}
+		if (strm.avail_in == 0)
+			break;
+		strm.next_in = in;
 
-    /* set limit to end of retrieved data */
-    assert(strm.total_out <= *limit);
-    *limit = strm.total_out;
+		/* run inflate(), fill data buffer with all available output */
+		ret = inflate(&strm, Z_FINISH);
+		assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
 
-    /* clean up and return */
-    (void)inflateEnd(&strm);
-    return (ret == Z_STREAM_END ? Z_STREAM_END : (strm.avail_out == 0 ? Z_OK : Z_DATA_ERROR));
+		switch (ret) {
+			case Z_NEED_DICT:
+				ret = Z_DATA_ERROR;     /* and fall through */
+			case Z_DATA_ERROR:
+			case Z_MEM_ERROR:
+				(void)inflateEnd(&strm);
+				return ret;
+		}
+		/* done when inflate() says it's done or limit reached */
+	} while (ret != Z_STREAM_END && strm.avail_out > 0);
+
+	/* set limit to end of retrieved data */
+	assert(strm.total_out <= *limit);
+	*limit = strm.total_out;
+
+	/* clean up and return */
+	(void)inflateEnd(&strm);
+	return (ret == Z_STREAM_END ? Z_STREAM_END : (strm.avail_out == 0 ? Z_OK : Z_DATA_ERROR));
 }
 
 /* report a zlib or i/o error */
 static void zerr(int ret)
 {
-    switch (ret) {
-    case Z_ERRNO:
-        if (ferror(stdin))
-            fputs("error reading stdin\n", stderr);
-        if (ferror(stdout))
-            fputs("error writing stdout\n", stderr);
-        break;
-    case Z_STREAM_ERROR:
-        fputs("invalid compression level\n", stderr);
-        break;
-    case Z_DATA_ERROR:
-        fputs("invalid or incomplete deflate data\n", stderr);
-        break;
-    case Z_MEM_ERROR:
-        fputs("out of memory\n", stderr);
-        break;
-    case Z_VERSION_ERROR:
-        fputs("zlib version mismatch!\n", stderr);
-    }
+	switch (ret) {
+		case Z_ERRNO:
+			if (ferror(stdin))
+				fputs("error reading stdin\n", stderr);
+			if (ferror(stdout))
+				fputs("error writing stdout\n", stderr);
+			break;
+		case Z_STREAM_ERROR:
+			fputs("invalid compression level\n", stderr);
+			break;
+		case Z_DATA_ERROR:
+			fputs("invalid or incomplete deflate data\n", stderr);
+			break;
+		case Z_MEM_ERROR:
+			fputs("out of memory\n", stderr);
+			break;
+		case Z_VERSION_ERROR:
+			fputs("zlib version mismatch!\n", stderr);
+	}
 }
 
 static unsigned int get_num(char *str)
@@ -191,46 +191,46 @@ int main(int argc, char **argv)
 
 	while ((opt = getopt(argc, argv, "s:e:o:l:i:r")) != -1) {
 		switch (opt) {
-		case 's':
-			initial_offset = (int)get_num(optarg);
-			if (errno) {
-				perror("Failed to parse seek offset");
-				goto out_bad;
-			}
-			break;
-		case 'e':
-			entry = (int) htobe16(get_num(optarg));
-			if (errno) {
-				perror("Failed to entry id");
-				goto out_bad;
-			}
-			break;
-		case 'o':
-			out = fopen(optarg, "w");
-			if (!out) {
-				perror("Failed to create output file");
-				goto out_bad;
-			}
-			break;
-		case 'l':
-			limit = (size_t)get_num(optarg);
-			if (errno) {
-				perror("Failed to parse limit");
-				goto out_bad;
-			}
-			break;
-		case 'i':
-			skip = (size_t)get_num(optarg);
-			if (errno) {
-				perror("Failed to parse skip");
-				goto out_bad;
-			}
-			break;
-		case 'r':
-			reversed = true;
-			break;
-		default: /* '?' */
-			usage();
+			case 's':
+				initial_offset = (int)get_num(optarg);
+				if (errno) {
+					perror("Failed to parse seek offset");
+					goto out_bad;
+				}
+				break;
+			case 'e':
+				entry = (int) htobe16(get_num(optarg));
+				if (errno) {
+					perror("Failed to entry id");
+					goto out_bad;
+				}
+				break;
+			case 'o':
+				out = fopen(optarg, "w");
+				if (!out) {
+					perror("Failed to create output file");
+					goto out_bad;
+				}
+				break;
+			case 'l':
+				limit = (size_t)get_num(optarg);
+				if (errno) {
+					perror("Failed to parse limit");
+					goto out_bad;
+				}
+				break;
+			case 'i':
+				skip = (size_t)get_num(optarg);
+				if (errno) {
+					perror("Failed to parse skip");
+					goto out_bad;
+				}
+				break;
+			case 'r':
+				reversed = true;
+				break;
+			default: /* '?' */
+				usage();
 		}
 	}
 
@@ -296,7 +296,7 @@ int main(int argc, char **argv)
 	}
 	fprintf(stderr, "DEBUG: Return value = %d. Writing %u bytes (total %u - %u skipped). Limit was %u\n", 
 			ret, (unsigned int)(datasize - skip), (unsigned int)datasize, (unsigned int) skip, (unsigned int)limit);
-	
+
 	ret = (ret == Z_STREAM_END) ? Z_OK : ret; /* normalize return value */
 	if (ret != Z_OK) {
 		zerr(ret);
@@ -305,7 +305,7 @@ int main(int argc, char **argv)
 
 	if (reversed)
 		buffer_reverse(buf, datasize - 1);
-	
+
 	fprintf(stderr, "DEBUG: Return value = %d. Writing %u bytes (total %u - %u skipped). Limit was %u\n", 
 			ret, (unsigned int)(datasize - skip), (unsigned int)datasize, (unsigned int)skip, (unsigned int)limit);
 
